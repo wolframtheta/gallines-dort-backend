@@ -7,6 +7,9 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "build:dev": "NODE_ENV=development nest build",
+    "build:pre": "NODE_ENV=pre nest build",
+    "build:pro": "NODE_ENV=production nest build",
     "migration:run:dev": "NODE_ENV=development pnpm exec typeorm-ts-node-commonjs migration:run -d src/data-source.ts",
     "migration:run:pre": "NODE_ENV=pre pnpm exec typeorm-ts-node-commonjs migration:run -d src/data-source.ts",
     "migration:run:pro": "NODE_ENV=production pnpm exec typeorm-ts-node-commonjs migration:run -d src/data-source.ts",
