@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { join } from 'path';
@@ -11,10 +12,12 @@ import { User } from './user/user.entity';
 import { RefreshToken } from './auth/refresh-token.entity';
 import { Transaction } from './transaction/transaction.entity';
 import { Order } from './order/order.entity';
+import { Subscription } from './subscription/subscription.entity';
 import { Group } from './group/group.entity';
 import { BalanceModule } from './balance/balance.module';
 import { TransactionModule } from './transaction/transaction.module';
 import { OrderModule } from './order/order.module';
+import { SubscriptionModule } from './subscription/subscription.module';
 import { UserModule } from './user/user.module';
 
 const envFile =
@@ -26,6 +29,7 @@ const envFile =
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: envFile,
@@ -42,7 +46,7 @@ const envFile =
           password: config.get('DB_PASSWORD'),
           database: config.get('DB_NAME'),
           ssl: host && !host.includes('localhost') ? { rejectUnauthorized: false } : false,
-          entities: [User, RefreshToken, Transaction, Order, Group],
+          entities: [User, RefreshToken, Transaction, Order, Subscription, Group],
           migrations: [join(__dirname, 'database', 'migrations', '*.js')],
           synchronize: false,
         };
@@ -54,6 +58,7 @@ const envFile =
     BalanceModule,
     TransactionModule,
     OrderModule,
+    SubscriptionModule,
   ],
   controllers: [AppController],
   providers: [

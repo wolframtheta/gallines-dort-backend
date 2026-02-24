@@ -5,8 +5,11 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { Transaction } from '../transaction/transaction.entity';
+import { Subscription } from '../subscription/subscription.entity';
 
 @Entity('orders')
 export class Order {
@@ -24,6 +27,13 @@ export class Order {
 
   @Column({ default: false })
   delivered: boolean;
+
+  @Column({ nullable: true })
+  subscriptionId: string;
+
+  @ManyToOne(() => Subscription, (s) => s.orders, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'subscriptionId' })
+  subscription: Subscription;
 
   @OneToMany(() => Transaction, (t) => t.order)
   transactions: Transaction[];
