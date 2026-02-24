@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Order } from './order.entity';
 import { TransactionService } from '../transaction/transaction.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 
@@ -17,6 +18,7 @@ export class OrderService {
     @InjectRepository(Order)
     private readonly orderRepo: Repository<Order>,
     private readonly transactionService: TransactionService,
+    private readonly subscriptionService: SubscriptionService,
     private readonly config: ConfigService,
   ) { }
 
@@ -31,6 +33,9 @@ export class OrderService {
       clientName: dto.clientName.trim(),
       mitgesDotzenes: dto.mitgesDotzenes,
     });
+    if (dto.createdAt) {
+      order.createdAt = new Date(dto.createdAt);
+    }
     return this.orderRepo.save(order);
   }
 
@@ -39,6 +44,12 @@ export class OrderService {
       where: { id },
     });
     if (!order) throw new NotFoundException('Comanda no trobada');
+
+    if (order.subscriptionId && dto.paid !== undefined) {
+      throw new BadRequestException(
+        'Les comandes de subscripció es cobren des de Subscripcions (Cobrar mes)'
+      );
+    }
 
     const wasPaid = order.paid;
     const willBePaid = dto.paid ?? order.paid;
@@ -60,7 +71,7 @@ export class OrderService {
       });
     }
 
-    // Handle unpayment (paid -> not paid)
+    // Handle unpayment (paid -> not paid): només es treu la transaction. La comanda següent (si n'hi ha) es manté.
     if (!willBePaid && wasPaid) {
       const transaction = await this.transactionService.findByOrderId(id);
       if (transaction) {
@@ -68,8 +79,22 @@ export class OrderService {
       }
     }
 
+    // Marcar com a no entregat: la comanda següent es manté, no s'elimina.
+
     Object.assign(order, dto);
-    return this.orderRepo.save(order);
+    const saved = await this.orderRepo.save(order);
+
+    // Quan una comanda de subscripció es marca com a entregada, assegura que hi ha la següent setmana.
+    // Si ja n'hi ha (p.ex. perquè s'havia desmarcat abans), no es crea duplicat.
+    const willBeDelivered = dto.delivered ?? order.delivered;
+    if (saved.subscriptionId && willBeDelivered) {
+      await this.subscriptionService.ensureNextWeekOrder(
+        saved.subscriptionId,
+        saved.createdAt,
+      );
+    }
+
+    return saved;
   }
 
   async remove(id: string, userId: string) {

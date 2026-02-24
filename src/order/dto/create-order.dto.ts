@@ -1,4 +1,4 @@
-import { IsNumber, IsString, Min, MinLength } from 'class-validator';
+import { IsDateString, IsNumber, IsOptional, IsString, Min, MinLength } from 'class-validator';
 
 export class CreateOrderDto {
   @IsString()
@@ -8,4 +8,8 @@ export class CreateOrderDto {
   @IsNumber()
   @Min(0.5, { message: 'Mínim 0.5 mitja dotzena' })
   mitgesDotzenes: number;
+
+  @IsOptional()
+  @IsDateString()
+  createdAt?: string;
 }
