@@ -52,11 +52,7 @@ export class AuthService {
       where: { token: refreshToken },
       relations: ['user'],
     });
-    if (
-      !tokenEntity ||
-      tokenEntity.expiresAt < new Date() ||
-      !tokenEntity.user
-    ) {
+    if (!tokenEntity || !tokenEntity.user) {
       throw new UnauthorizedException('Invalid refresh token');
     }
     await this.refreshTokenRepo.remove(tokenEntity);
@@ -74,12 +70,10 @@ export class AuthService {
   private async createTokenPair(user: User) {
     const payload = { sub: user.id, email: user.email };
     const accessToken = this.jwtService.sign(payload, {
-      expiresIn: this.config.get('JWT_EXPIRES_IN', '15m'),
       secret: this.config.get('JWT_SECRET'),
     });
     const refreshToken = randomBytes(48).toString('hex');
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    const expiresAt = new Date('9999-12-31');
     await this.refreshTokenRepo.save({
       userId: user.id,
       token: refreshToken,
@@ -88,7 +82,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      expiresIn: 900, // 15 min in seconds
+      expiresIn: 9999999999, // never (effectively)
       user: {
         id: user.id,
         email: user.email,
