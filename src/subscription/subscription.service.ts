@@ -183,12 +183,6 @@ export class SubscriptionService {
       },
     });
 
-    if (orders.length === 0) {
-      throw new BadRequestException(
-        'No hi ha comandes sense cobrar aquest mes per aquesta subscripció'
-      );
-    }
-
     const totalMitges = orders.reduce((s, o) => s + o.mitgesDotzenes, 0);
     const amount =
       sub.amountPerMonth != null && sub.amountPerMonth > 0
@@ -204,6 +198,7 @@ export class SubscriptionService {
       sub.amountPerMonth != null && sub.amountPerMonth > 0
         ? `Subscripció: ${sub.clientName} - ${monthStr} (${orders.length} setmanes)`
         : `Subscripció: ${sub.clientName} - ${monthStr} (${orders.length} setmanes, ${totalMitges} mitges dotzenes)`;
+
     await this.transactionService.create(userId, {
       userId,
       clientName: sub.clientName,
