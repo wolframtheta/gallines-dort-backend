@@ -1,0 +1,9 @@
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - bcrypt
+  - sqlite3
+
+allowBuilds:
+  '@nestjs/core': true
+  bcrypt: true
+  sqlite3: true
