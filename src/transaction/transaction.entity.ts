@@ -45,6 +45,15 @@ export class Transaction {
   @Column()
   date: string;
 
+  @Column({ nullable: true })
+  paymentGroupId: string;
+
+  @Column({ default: false })
+  isSettlement: boolean;
+
+  @Column({ nullable: true })
+  splitGroupId: string;
+
   @CreateDateColumn()
   createdAt: Date;
 }

@@ -9,7 +9,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN pnpm build:pro
+RUN pnpm build
 
 # Production stage
 FROM node:24-alpine
@@ -17,8 +17,6 @@ FROM node:24-alpine
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
-
-ENV NODE_ENV=production
 
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile --prod

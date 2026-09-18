@@ -27,4 +27,8 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsString()
   orderId?: string;
+
+  @IsOptional()
+  @IsString()
+  splitGroupId?: string;
 }

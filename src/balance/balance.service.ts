@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { User } from '../user/user.entity';
 import { Transaction } from '../transaction/transaction.entity';
 
@@ -36,39 +36,86 @@ export class BalanceService {
       order: { createdAt: 'ASC' },
     });
 
-    // Get aggregated balances per user directly from DB
-    const rawBalances = await this.transactionRepo
+    // 1a. Despeses reals del grup (sense payment ni split) → fairShare
+    const fairShareBalances = await this.transactionRepo
       .createQueryBuilder('t')
       .select('t.userId', 'userId')
       .addSelect('t.type', 'type')
       .addSelect('SUM(t.amount)', 'total')
       .where('t.userId IS NOT NULL')
+      .andWhere('t.paymentGroupId IS NULL')
+      .andWhere('t.splitGroupId IS NULL')
       .groupBy('t.userId')
       .addGroupBy('t.type')
       .getRawMany();
 
-    const balances: Record<string, { paid: number; held: number }> = {};
-    users.forEach((u) => {
-      balances[u.id] = { paid: 0, held: 0 };
+    // 1b. Despeses visibles (inclou avançaments de splits) per «Ha pagat»
+    const paidBalances = await this.transactionRepo
+      .createQueryBuilder('t')
+      .select('t.userId', 'userId')
+      .addSelect('SUM(t.amount)', 'total')
+      .where('t.userId IS NOT NULL')
+      .andWhere('t.type = :type', { type: 'expense' })
+      .andWhere('t.paymentGroupId IS NULL')
+      .groupBy('t.userId')
+      .getRawMany();
+
+    // 2. Payment pairs (amb paymentGroupId) → deutes o liquidacions
+    const paymentTxs = await this.transactionRepo.find({
+      where: { paymentGroupId: Not(IsNull()) },
     });
 
-    rawBalances.forEach((row) => {
-      if (balances[row.userId]) {
+    const paymentPairs = new Map<
+      string,
+      { from: string; to: string; amount: number; isSettlement: boolean }
+    >();
+    for (const tx of paymentTxs) {
+      if (!tx.paymentGroupId) continue;
+      const existing = paymentPairs.get(tx.paymentGroupId);
+      if (!existing) {
+        paymentPairs.set(tx.paymentGroupId, {
+          from: tx.type === 'expense' ? tx.userId : '',
+          to: tx.type === 'income' ? tx.userId : '',
+          amount: tx.amount,
+          isSettlement: tx.isSettlement,
+        });
+      } else {
+        if (tx.type === 'expense') existing.from = tx.userId;
+        if (tx.type === 'income') existing.to = tx.userId;
+      }
+    }
+
+    const fairShareByUser: Record<string, { paid: number; held: number }> = {};
+    const displayPaid: Record<string, number> = {};
+    users.forEach((u) => {
+      fairShareByUser[u.id] = { paid: 0, held: 0 };
+      displayPaid[u.id] = 0;
+    });
+
+    fairShareBalances.forEach((row) => {
+      if (fairShareByUser[row.userId]) {
         const amount = parseFloat(row.total);
-        if (row.type === 'expense') balances[row.userId].paid += amount;
-        else if (row.type === 'income') balances[row.userId].held += amount;
+        if (row.type === 'expense') fairShareByUser[row.userId].paid += amount;
+        else if (row.type === 'income') fairShareByUser[row.userId].held += amount;
       }
     });
 
+    paidBalances.forEach((row) => {
+      if (displayPaid[row.userId] !== undefined) {
+        displayPaid[row.userId] = parseFloat(row.total);
+      }
+    });
+
+    // FairShare sobre despeses reals del grup (sense splits ni payments)
     let totalGroupContribution = 0;
     const settlement: SettlementRow[] = users.map((u) => {
-      const b = balances[u.id] || { paid: 0, held: 0 };
+      const b = fairShareByUser[u.id] || { paid: 0, held: 0 };
       const netContribution = b.paid - b.held;
       totalGroupContribution += netContribution;
       return {
         person: u.displayName || u.email,
         personId: u.id,
-        paid: b.paid,
+        paid: displayPaid[u.id] ?? 0,
         held: b.held,
         netContribution,
         diff: 0,
@@ -82,6 +129,25 @@ export class BalanceService {
       s.fairShare = fairShare;
       s.diff = s.netContribution - fairShare;
     });
+
+    // Ajustar diff amb payments (splits i liquidacions)
+    for (const [, pair] of paymentPairs) {
+      if (!pair.from || !pair.to || pair.amount < 0.01) continue;
+
+      const fromRow = settlement.find((s) => s.personId === pair.from);
+      const toRow = settlement.find((s) => s.personId === pair.to);
+      if (!fromRow || !toRow) continue;
+
+      if (pair.isSettlement) {
+        // Liquidació: from ha pagat a to → redueix deute
+        fromRow.diff += pair.amount;
+        toRow.diff -= pair.amount;
+      } else {
+        // Split: from deu a to (qui ha avançat)
+        fromRow.diff -= pair.amount;
+        toRow.diff += pair.amount;
+      }
+    }
 
     const transfers = this.calculateTransfers(settlement);
 
